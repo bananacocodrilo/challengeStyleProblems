@@ -1,7 +1,8 @@
 var MAX_TEMP = 300;
 var MAX_SPARKING = 300;
-var heat = [];
 
+script.addFloatParameter("anim_fps", "", 70, 10, 100);
+script.addIntParameter("spark_area", "", 5, 1, 10);
 script.addFloatParameter("cooling", "", 55, 10, 200);
 script.addFloatParameter("sparking", "", 120, 10, MAX_SPARKING);
 script.addFloatParameter("alpha", "", 100, 0, 255);
@@ -43,7 +44,7 @@ function heatColor(temp) {
   return color;
 }
 
-function recalculateTemperature() {
+function recalculateTemperature(heat) {
   // Step 1.  Calculate temperature and cool down every cell a little
   for (var i = 0; i < heat.length; i++) {
     heat[i].temperature =
@@ -63,8 +64,8 @@ function recalculateTemperature() {
 
   // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
   if (getRandom(0, MAX_SPARKING) < params.sparking) {
-    var y = getRandom(0, 7);
-    var spark = getRandom((2 * MAX_TEMP) / 3, MAX_TEMP);
+    var y = getRandom(0, params.spark_area);
+    var spark = getRandom((4 * MAX_TEMP) / 5, MAX_TEMP);
 
     if (heat[y].temperature < spark) {
       heat[y].temperature = spark;
@@ -74,8 +75,8 @@ function recalculateTemperature() {
   // Step 4.  Map from heat cells to LED colors
   for (var j = 0; j < heat.length; j++) {
     var color = heatColor(heat[j].temperature);
-    //   var color = heatColor(200);
     var pixelnumber;
+
     if (params.reverse_direction) {
       pixelnumber = heat.length - 1 - j;
     } else {
@@ -87,8 +88,19 @@ function recalculateTemperature() {
   }
 }
 
+var next_frame = [];
+var id;
+var global_heat = [[]];
+
 function updateColors(colours, id, resolution, time, params) {
-  while (heat.length < resolution) {
+  // Support N props at the same time
+  while (global_heat.length < id + 1) {
+    global_heat.push([]);
+    next_frame.push(0);
+  }
+
+  // Unknown prop size
+  while (global_heat[id].length < resolution) {
     var pixel = {
       r: 0,
       g: 0,
@@ -96,12 +108,21 @@ function updateColors(colours, id, resolution, time, params) {
       temp: 0,
     };
 
-    heat.push(pixel);
+    global_heat[id].push(pixel);
   }
 
-  recalculateTemperature();
+  if (time > next_frame[id]) {
+    next_frame[id] = time + 1 / params.anim_fps;
+    recalculateTemperature(global_heat[id]);
+  }
 
   for (var i = 0; i < resolution; i++) {
-    colours.set(i, heat[i].r, heat[i].g, heat[i].b, 1);
+    colours.set(
+      i,
+      global_heat[id][i].r,
+      global_heat[id][i].g,
+      global_heat[id][i].b,
+      1
+    );
   }
 }
