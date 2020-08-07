@@ -1,84 +1,18 @@
-/**
- * Fire animation for [BenTo](https://bkuperberg.gitbook.io/)
- * I don't even know what this is tbh. I wrote some basic fire animation using the api provided in that link for my hippie roommate
- */
+var MAX_TEMP = 300;
+var MAX_SPARKING = 300;
+var heat = [];
 
-const MAX_TEMP = 300;
-const DEFAULT_ALPHA = 100;
-const MAX_SPARKING = 300;
-let heat;
-let initialized = false;
-
-// COOLING: How much does the air cool as it rises?
-// Less cooling = taller flames.  More cooling = shorter flames.
-// Default 50, suggested range 20-100
-script.addIntParameter("cooling", "", 55, 10, 200);
-
-// SPARKING: What chance (out of 255) is there that a new spark will be lit?
-// Higher chance = more roaring fire.  Lower chance = more flickery fire.
-// Default 120, suggested range 50-200.
-script.addIntParameter("sparking", "", 120, 10, MAX_SPARKING);
-
-script.addIntParameter("alpha", "", 100, 0, 255);
-
+script.addFloatParameter("cooling", "", 55, 10, 200);
+script.addFloatParameter("sparking", "", 120, 10, MAX_SPARKING);
+script.addFloatParameter("alpha", "", 100, 0, 255);
 script.addBoolParameter("reverse_direction", "", false);
 
-function updateColors(colours, id, resolution, time, params) {
-  if (!initialized) {
-    initialized = true;
-    heat = [resolution];
-  }
-
-  fireAnimation(colours, resolution, params);
+function getRandom(min, max) {
+  return Math.floor(Math.random() * (max - min)) + min;
 }
 
-function fireAnimation(pixels, num_pixels, params) {
-  // Step 1.  Calculate temperature and cool down every cell a little
-  for (let i = 0; i < num_pixels; i++) {
-    heat[i] = heat[i] - getRandom(0, (params.cooling * 10) / num_pixels + 2);
-
-    if (heat[i] < 0) {
-      heat[i] = 0;
-    }
-  }
-
-  // Step 2.  Heat from each cell drifts 'up' and diffuses a little
-  for (let k = num_pixels - 1; k >= 2; k--) {
-    heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2]) / 3;
-  }
-
-  // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
-  if (getRandom(0, SPARKING) < SPARKING) {
-    let y = getRandom(0, 7);
-    let spark = getRandom(160, 255);
-    if (heat[y] > spark) {
-      heat[i] = spark;
-    }
-  }
-
-  // Step 4.  Map from heat cells to LED colors
-  for (let j = 0; j < num_pixels; j++) {
-    let color = heatColor(heat[j]);
-    let pixelnumber;
-    if (params.reverse_direction) {
-      pixelnumber = num_pixels - 1 - j;
-    } else {
-      pixelnumber = j;
-    }
-
-    leds[pixelnumber] = setcolor;
-    pixels.set(pixelnumber, color.r, color.g, color.b, params.alpha);
-  }
-}
-
-let getRandom = (min, max) => {
-  return Math.random() * (max - min) + min;
-};
-
-let heatColor = (temperature) => {
-  const temp_spectrum = [(2 * MAX_TEMP) / 3, MAX_TEMP / 3, 0];
-
-  let heatcolor = {
+function heatColor(temp) {
+  var color = {
     r: 0,
     g: 0,
     b: 0,
@@ -89,22 +23,85 @@ let heatColor = (temperature) => {
   }
 
   // now figure out which third of the spectrum we're in:
-  if (temp > temp_spectrum[2]) {
+  if (temp > (2 * MAX_TEMP) / 3) {
     // we're in the hottest third
-    heatcolor.r = 255; // full red
-    heatcolor.g = 255; // full green
-    heatcolor.b = 255 * ((temp - temp_spectrum[2]) / (MAX_TEMP / 3)); // ramp up blue
-  } else if (temp > temp_spectrum[1]) {
+    color.r = 1; // full red
+    color.g = 1; // full green
+    color.b = (0.01 + temp - (2 * MAX_TEMP) / 3) / 100; // ramp up blue
+  } else if (temp > MAX_TEMP / 3) {
     // we're in the middle third
-    heatcolor.r = 255; // full red
-    heatcolor.g = 255 * ((temp - temp_spectrum[1]) / (MAX_TEMP / 3)); // ramp up green
-    heatcolor.b = 0; // no blue
+    color.r = 1; // full red
+    color.g = (temp - MAX_TEMP / 3) / 100; // ramp up green
+    color.b = 0; // no blue
   } else {
     // we're in the coolest third
-    heatcolor.r = 255 * (temp / (MAX_TEMP / 3)); // ramp up red
-    heatcolor.g = 0; // no green
-    heatcolor.b = 0; // no blue
+    color.r = temp / 100; // ramp up red
+    color.g = 0; // no green
+    color.b = 0; // no blue
   }
 
-  return heatcolor;
-};
+  return color;
+}
+
+function recalculateTemperature() {
+  // Step 1.  Calculate temperature and cool down every cell a little
+  for (var i = 0; i < heat.length; i++) {
+    heat[i].temperature =
+      heat[i].temperature -
+      getRandom(0, (params.cooling * 10) / heat.length + 2);
+
+    if (heat[i].temperature < 0) {
+      heat[i].temperature = 0;
+    }
+  }
+
+  // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+  for (var k = heat.length - 1; k >= 2; k--) {
+    heat[k].temperature =
+      (heat[k - 1].temperature + 2 * heat[k - 2].temperature) / 3;
+  }
+
+  // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+  if (getRandom(0, MAX_SPARKING) < params.sparking) {
+    var y = getRandom(0, 7);
+    var spark = getRandom((2 * MAX_TEMP) / 3, MAX_TEMP);
+
+    if (heat[y].temperature < spark) {
+      heat[y].temperature = spark;
+    }
+  }
+
+  // Step 4.  Map from heat cells to LED colors
+  for (var j = 0; j < heat.length; j++) {
+    var color = heatColor(heat[j].temperature);
+    //   var color = heatColor(200);
+    var pixelnumber;
+    if (params.reverse_direction) {
+      pixelnumber = heat.length - 1 - j;
+    } else {
+      pixelnumber = j;
+    }
+    heat[pixelnumber].r = color.r;
+    heat[pixelnumber].g = color.g;
+    heat[pixelnumber].b = color.b;
+  }
+}
+
+function updateColors(colours, id, resolution, time, params) {
+  while (heat.length < resolution) {
+    var pixel = {
+      r: 0,
+      g: 0,
+      b: 0,
+      temp: 0,
+    };
+
+    heat.push(pixel);
+  }
+
+  recalculateTemperature();
+
+  for (var i = 0; i < resolution; i++) {
+    colours.set(i, heat[i].r, heat[i].g, heat[i].b, 1);
+  }
+}
