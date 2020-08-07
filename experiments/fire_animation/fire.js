@@ -1,3 +1,14 @@
+/**
+ * @file fire.js
+ * @author Bananacocodrilo
+ * @brief Ported the Fire animation from FastLed to [BenTo](https://bkuperberg.gitbook.io/bento-docs/software/scripting)
+ * @version 0.1
+ * @date 2020-03-25
+ *
+ * No copyright, no license, do whatever you want with this, just don't ask me anything because I truly don't know what's going on, ask my roommate instead.
+ * All I can say is that I see lots of lights flashing around me everytime I push something here and he seems super happy about it.
+ *
+ */
 var MAX_TEMP = 300;
 var MAX_SPARKING = 300;
 
